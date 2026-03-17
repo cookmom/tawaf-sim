@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#000;overflow:hidden;font-family:'JetBrains Mono',monospace;color:#E0E0E0;width:430px;height:932px;position:relative}
+body{background:#000;overflow-x:hidden;overflow-y:auto;font-family:'JetBrains Mono',monospace;color:#E0E0E0;width:100%;max-width:430px;min-height:100vh;margin:0 auto;position:relative}
 
 /* TOP BAR */
 #top-bar{position:absolute;top:0;left:0;right:0;height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;z-index:10}
@@ -36,7 +36,7 @@ body{background:#000;overflow:hidden;font-family:'JetBrains Mono',monospace;colo
 .confidence-bar .seg.filled{background:#00FF88;box-shadow:0 0 2px #00FF88}
 
 /* RIGHT PANEL — DEMOGRAPHICS */
-#right-panel{position:absolute;top:50px;right:6px;width:100px;z-index:10;text-align:right}
+#right-panel{position:absolute;top:50px;right:6px;width:90px;z-index:10;text-align:right;overflow:hidden}
 #right-panel .panel-header{font-size:7px;font-weight:700;letter-spacing:2.5px;color:#00FFFF;text-transform:uppercase;margin-bottom:6px}
 .demo-row{display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-bottom:3px;font-size:7px;line-height:1.4}
 .demo-row .dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
@@ -81,6 +81,40 @@ body{background:#000;overflow:hidden;font-family:'JetBrains Mono',monospace;colo
 
 /* MAIN CANVAS */
 canvas#c{position:absolute;top:0;left:0;z-index:1}
+
+/* MOBILE RESPONSIVE */
+@media (max-width: 440px) {
+  body{width:100vw;max-width:100vw;overflow-y:auto}
+  #top-bar .title{font-size:7px;letter-spacing:2px}
+  #top-bar .status{font-size:6px}
+  #time-bar .makkah-time{font-size:7px}
+  #time-bar .next-prayer{font-size:6px}
+  #left-panel{width:85px;left:4px;top:48px}
+  #left-panel .panel-header{font-size:6px;letter-spacing:2px}
+  .bayes-formula{font-size:6px}
+  .bayes-metrics{font-size:6px}
+  #right-panel{width:80px;right:4px;top:48px}
+  #right-panel .panel-header{font-size:6px;letter-spacing:2px}
+  .demo-row{font-size:6px;gap:2px}
+  .demo-row .bar-bg{width:20px}
+  .demo-row .pct{min-width:18px}
+  #center-stats{left:92px;right:92px;top:48px}
+  .cstat .val{font-size:10px}
+  .cstat .lbl{font-size:5px}
+  #phase-indicator{top:72px}
+  #phase-indicator .phase-name{font-size:8px;letter-spacing:2px}
+  #phase-indicator .phase-sub{font-size:6px}
+  #event-log{bottom:52px;left:4px;width:55%;height:90px}
+  #event-log .panel-header{font-size:6px}
+  #event-log .log-entries{font-size:5.5px;height:78px}
+  #density-panel{bottom:52px;right:4px;width:38%}
+  #density-panel .panel-header{font-size:6px}
+  #density-chart{width:100%;height:70px}
+  #bottom-bar{bottom:6px;padding:0 4px}
+  .bstat .val{font-size:8px}
+  .bstat .lbl{font-size:5px;letter-spacing:1px}
+  canvas#c{width:100vw!important;height:100vh!important}
+}
 </style>
 </head>
 <body>
@@ -168,11 +202,12 @@ canvas#c{position:absolute;top:0;left:0;z-index:1}
 
 <script>
 // --- CONFIG ---
-const W = 430, H = 932;
+const W = Math.min(430, window.innerWidth);
+const H = Math.min(932, window.innerHeight);
 const CX = W / 2, CY = H / 2 + 10;
 const KAABAH_SIZE = 36;
 const MATAF_INNER = 42;
-const MATAF_OUTER = 175;
+const MATAF_OUTER = Math.min(175, W * 0.41);
 const MAX_AGENTS = 3500;
 
 // --- DEMOGRAPHICS ---
@@ -584,10 +619,20 @@ function updateAgents(dt, isPraying) {
     const angle = Math.atan2(dy, dx);
 
     if (isPraying) {
-      avx[i] *= 0.93;
-      avy[i] *= 0.93;
+      // Slow drift at ~10% speed — some pilgrims always circling during salah
+      const tx_p = -dy / dist;
+      const ty_p = dx / dist;
+      const prayerSpeed = aspeed[i] * 0.10;
+      const targetVx = tx_p * prayerSpeed + (Math.random() - 0.5) * 0.02;
+      const targetVy = ty_p * prayerSpeed + (Math.random() - 0.5) * 0.02;
+      avx[i] += (targetVx - avx[i]) * 0.03;
+      avy[i] += (targetVy - avy[i]) * 0.03;
       ax[i] += avx[i] * dt;
       ay[i] += avy[i] * dt;
+      // Keep agents in bounds during prayer
+      const pDist = Math.sqrt((ax[i]-CX)*(ax[i]-CX) + (ay[i]-CY)*(ay[i]-CY));
+      if (pDist < MATAF_INNER) { ax[i] = CX + (ax[i]-CX)/pDist*(MATAF_INNER+1); ay[i] = CY + (ay[i]-CY)/pDist*(MATAF_INNER+1); }
+      if (pDist > MATAF_OUTER) { ax[i] = CX + (ax[i]-CX)/pDist*(MATAF_OUTER-1); ay[i] = CY + (ay[i]-CY)/pDist*(MATAF_OUTER-1); }
       continue;
     }
 
@@ -1023,7 +1068,7 @@ function updateUI(info) {
   if (info.phase === 'prayer') {
     phaseEl.textContent = info.current.toUpperCase() + ' SALAH';
     phaseEl.style.color = '#d4af37';
-    phaseSub.textContent = 'TAWAF SUSPENDED';
+    phaseSub.textContent = 'SLOW DRIFT — PILGRIMS SETTLING';
     statusDot.className = 'dot amber';
     statusText.textContent = 'PRAYER';
     if (!updateUI._lastPrayerLogged || updateUI._lastPrayerLogged !== info.current) {
